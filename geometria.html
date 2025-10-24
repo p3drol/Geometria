@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Calculadora de Áreas — Figuras Planas</title>
+  <style>
+    :root{
+      --bg:#071029;
+      --accent:#7C4DFF;
+      --glass: rgba(255,255,255,0.04);
+      --muted: rgba(255,255,255,0.6);
+      --card-bg: linear-gradient(135deg, rgba(124,77,255,0.12), rgba(0,0,0,0.12));
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#02030a);color:#e8eefc}
+    .app{display:grid;grid-template-columns:260px 1fr 340px;gap:20px;height:100vh;padding:24px}
+
+    .sidebar{background:var(--glass);backdrop-filter: blur(8px);border-radius:14px;padding:16px;box-shadow:0 6px 20px rgba(2,6,23,0.6)}
+    .logo{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+    .logo .mark{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#2B4BFF);display:flex;align-items:center;justify-content:center;font-weight:700}
+    .shapes{display:flex;flex-direction:column;gap:8px}
+    .shape-btn{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);cursor:pointer}
+    .shape-btn.active{background:linear-gradient(90deg, rgba(124,77,255,0.12), rgba(43,75,255,0.06));box-shadow:inset 0 1px 0 rgba(255,255,255,0.02)}
+
+    .canvas-card{background:var(--card-bg);border-radius:14px;padding:16px;display:flex;flex-direction:column;align-items:stretch;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    .canvas-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .svg-wrap{flex:1;min-height:0;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));border-radius:10px;padding:10px;display:flex;align-items:center;justify-content:center}
+    svg{width:100%;height:100%;max-height:72vh}
+
+    .controls{background:var(--glass);padding:16px;border-radius:14px;box-shadow:0 6px 20px rgba(2,6,23,0.6);display:flex;flex-direction:column;gap:12px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    label{font-size:13px;color:var(--muted)}
+    input[type=range]{width:100%}
+    input[type=number], .result{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:8px;color:inherit}
+    .result{font-size:20px;font-weight:600;padding:12px;text-align:center}
+    .small{font-size:12px;color:#b7c3ff66}
+
+    .row{display:flex;gap:8px}
+    .btn{padding:10px 12px;border-radius:10px;border:0;cursor:pointer;background:var(--accent);color:#fff}
+    .muted{opacity:0.85}
+
+    .handle{cursor:grab}
+    .hint{font-size:12px;color:#c7d0ff66}
+
+    @media (max-width:1000px){
+      .app{grid-template-columns:1fr;grid-auto-rows:auto;padding:12px}
+      .sidebar{order:3}
+      .controls{order:2}
+      .canvas-card{order:1}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="sidebar">
+      <div class="logo"><div class="mark">Á</div><div><div style="font-weight:700">Áreas — Figuras</div><div class="small">Interactive & JavaScript</div></div></div>
+      <div class="shapes" id="shapes"></div>
+      <div style="height:8px"></div>
+      <div class="small">Site feito pelo aluno <strong>Pedro Lucas</strong> - 2 tec. em desenvolvimento de sistemas
+      instagram: @_p3drol_l - Github: p3drol</div>
+    </div>
+
+    <div class="canvas-card">
+      <div class="canvas-header">
+        <div style="font-weight:700;font-size:18px" id="title">Quadrado</div>
+        <div class="hint">Unidades arbitrárias — resultado em unidades²</div>
+      </div>
+      <div class="svg-wrap">
+        <svg id="svg" viewBox="-10 -10 520 360" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="field">
+        <label>Parâmetros</label>
+        <div id="params"></div>
+      </div>
+      <div class="field">
+        <label>Resultado</label>
+        <div class="result" id="area">—</div>
+        <div class="small" id="formula">—</div>
+      </div>
+      <div class="row">
+        <button class="btn" id="reset">Resetar</button>
+        <button class="btn" id="download">Baixar SVG</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+// Visual scaling constants
+const VIS_MIN_LARGEST = 140; // se a maior dimensão for menor que este valor, escalamos pra ficar legível
+const VIS_MAX_LARGEST = 380; // se a dimensão for maior que isto, escalamos pra caber
+
+const SHAPES = [
+  {id:'quadro', name:'Quadrado'},
+  {id:'retangulo', name:'Retângulo'},
+  {id:'paralelograma', name:'Paralelogramo'},
+  {id:'trapezio', name:'Trapézio'},
+  {id:'losango', name:'Losango'},
+  {id:'triangulo', name:'Triângulo'},
+  {id:'triangulo-equilatero', name:'Triângulo Equilátero'},
+  {id:'circulo', name:'Círculo'},
+  {id:'coroa', name:'Coroa do Círculo (Anel)'},
+  {id:'setor', name:'Setor do Círculo'}
+];
+
+const shapesEl = document.getElementById('shapes');
+const svg = document.getElementById('svg');
+const titleEl = document.getElementById('title');
+const paramsEl = document.getElementById('params');
+const areaEl = document.getElementById('area');
+const formulaEl = document.getElementById('formula');
+const resetBtn = document.getElementById('reset');
+const downloadBtn = document.getElementById('download');
+
+let state = { shape: 'quadro', values: {} };
+
+// cria botões
+SHAPES.forEach(s=>{
+  const btn = document.createElement('div'); btn.className='shape-btn'+(s.id===state.shape? ' active':''); btn.textContent = s.name; btn.onclick = ()=>selectShape(s.id); shapesEl.appendChild(btn);
+});
+
+function selectShape(id){ state.shape = id; titleEl.textContent = SHAPES.find(x=>x.id===id).name; initStateForShape(id); renderParams(); draw(); renderButtonsActive(); }
+
+function initStateForShape(id){
+  if(id==='quadro') state.values = {a:120};
+  if(id==='retangulo') state.values = {w:180,h:100};
+  if(id==='paralelograma') state.values = {base:200,altura:100,offset:40};
+  if(id==='trapezio') state.values = {b1:260,b2:120,altura:90};
+  if(id==='losango') state.values = {d1:240,d2:140};
+  if(id==='triangulo') state.values = {b:220,altura:120};
+  if(id==='triangulo-equilatero') state.values = {lado:220};
+  if(id==='circulo') state.values = {r:90};
+  if(id==='coroa') state.values = {rOuter:110,rInner:60};
+  if(id==='setor') state.values = {r:110,angle:60};
+}
+
+function renderParams(){
+  paramsEl.innerHTML='';
+  const vals = state.values;
+  for(const key in vals){
+    const wrap = document.createElement('div'); wrap.className='field';
+    const label = document.createElement('label'); label.textContent = key;
+    const num = document.createElement('input'); num.type='number'; num.value=vals[key]; num.step='any'; num.min='0.1'; num.oninput = (e)=>{ state.values[key]=Math.max(0.1,parseFloat(e.target.value) || 0.1); draw(); }
+    const range = document.createElement('input'); range.type='range'; range.min = 0.1; range.max = Math.max(300, vals[key]*3); range.value = vals[key]; range.oninput = (e)=>{ state.values[key]=parseFloat(e.target.value); num.value=e.target.value; draw(); }
+    wrap.appendChild(label); wrap.appendChild(num); wrap.appendChild(range); paramsEl.appendChild(wrap);
+  }
+}
+
+function renderButtonsActive(){ Array.from(shapesEl.children).forEach(ch=>{ ch.classList.toggle('active', ch.textContent===SHAPES.find(s=>s.id===state.shape).name); }); }
+
+function clearSVG(){ svg.innerHTML=''; }
+function create(tag,attrs){ const el = document.createElementNS('http://www.w3.org/2000/svg', tag); for(const k in attrs) el.setAttribute(k, attrs[k]); return el; }
+
+let dragInfo = null;
+function makeHandle(x,y,onmove){
+  const g = create('g',{});
+  const c = create('circle',{cx:x,cy:y,r:7,fill:'#fff',stroke: 'rgba(0,0,0,0.25)','stroke-width':1});
+  c.setAttribute('class','handle');
+  const inner = create('circle',{cx:x,cy:y,r:3,fill:'#7C4DFF'});
+  g.appendChild(c); g.appendChild(inner); svg.appendChild(g);
+  c.addEventListener('pointerdown',(ev)=>{ ev.preventDefault(); c.setPointerCapture(ev.pointerId); dragInfo={id:ev.pointerId, onmove}; });
+  window.addEventListener('pointermove',(ev)=>{
+    if(!dragInfo || dragInfo.id!==ev.pointerId) return; const pt = svg.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; const loc = pt.matrixTransform(svg.getScreenCTM().inverse()); c.setAttribute('cx',loc.x); c.setAttribute('cy',loc.y); inner.setAttribute('cx',loc.x); inner.setAttribute('cy',loc.y); dragInfo.onmove(loc.x,loc.y);
+  });
+  window.addEventListener('pointerup',(ev)=>{ if(dragInfo && dragInfo.id===ev.pointerId) dragInfo=null; });
+  return {el:g,circle:c};
+}
+
+// calcula escala visual com base nas dimensões reais
+function getScaleFor(valuesArray){
+  const arr = valuesArray.filter(v=>isFinite(v) && v>0);
+  if(arr.length===0) return 1;
+  const maxRaw = Math.max(...arr);
+  if(maxRaw <= 0) return 1;
+  if(maxRaw < VIS_MIN_LARGEST) return VIS_MIN_LARGEST / maxRaw;
+  if(maxRaw > VIS_MAX_LARGEST) return VIS_MAX_LARGEST / maxRaw;
+  return 1;
+}
+
+function draw(){ clearSVG(); const s = state.shape;
+  if(s==='quadro') drawSquare();
+  else if(s==='retangulo') drawRect();
+  else if(s==='paralelograma') drawParallelogram();
+  else if(s==='trapezio') drawTrapezoid();
+  else if(s==='losango') drawRhombus();
+  else if(s==='triangulo') drawTriangle();
+  else if(s==='triangulo-equilatero') drawEquilateral();
+  else if(s==='circulo') drawCircle();
+  else if(s==='coroa') drawAnnulus();
+  else if(s==='setor') drawSector();
+}
+
+function drawSquare(){ const a = Math.max(0.1, state.values.a); const scale = getScaleFor([a]); const aVis = a*scale; const x=60,y=40;
+  const rect = create('rect',{x:x,y:y,width:aVis,height:aVis,fill:'rgba(124,77,255,0.09)',stroke:'rgba(124,77,255,0.9)','stroke-width':2}); svg.appendChild(rect);
+  makeHandle(x+aVis,y+aVis,(hx,hy)=>{ const newA = Math.max(0.1, ((hx - x) / scale)); state.values.a = Math.round(newA*100)/100; renderParams(); draw(); });
+  const area = a*a; areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = a × a = ${a} × ${a} = ${area.toFixed(4)}  (visual ×${scale.toFixed(2)})`;
+}
+
+function drawRect(){ const w = Math.max(0.1, state.values.w), h = Math.max(0.1, state.values.h); const scale = getScaleFor([w,h]); const wV = w*scale, hV = h*scale; const x=60,y=60;
+  const r = create('rect',{x:x,y:y,width:wV,height:hV,fill:'rgba(43,75,255,0.06)',stroke:'rgba(43,75,255,0.9)','stroke-width':2}); svg.appendChild(r);
+  makeHandle(x+wV,y+hV,(hx,hy)=>{ state.values.w = Math.round(((hx-x)/scale)*100)/100; state.values.h = Math.round(((hy-y)/scale)*100)/100; renderParams(); draw(); });
+  const area = w*h; areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = largura × altura = ${w} × ${h} = ${area.toFixed(4)}  (visual ×${scale.toFixed(2)})`;
+}
+
+function drawParallelogram(){ const base = Math.max(0.1, state.values.base), altura = Math.max(0.1, state.values.altura), offset = state.values.offset || 0; const scale = getScaleFor([base,altura]); const bV = base*scale, hV = altura*scale, offV = offset*scale; const x=60,y=60;
+  const points = [ [x,y], [x+bV,y], [x+bV-offV,y+hV], [x-offV,y+hV] ]; const poly = create('polygon',{points:points.map(p=>p.join(',')).join(' '), fill:'rgba(124,77,255,0.06)', stroke:'rgba(124,77,255,0.9)','stroke-width':2}); svg.appendChild(poly);
+  makeHandle(x+bV,y,(hx,hy)=>{ state.values.base = Math.round(((hx-x)/scale)*100)/100; renderParams(); draw(); });
+  makeHandle(x+10,y+hV,(hx,hy)=>{ state.values.altura = Math.round(((hy-y)/scale)*100)/100; renderParams(); draw(); });
+  makeHandle(x+bV-offV,y+hV,(hx,hy)=>{ state.values.offset = Math.round(((x+bV - hx)/scale)*100)/100; renderParams(); draw(); });
+  const area = base*altura; areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = base × altura = ${base} × ${altura} = ${area.toFixed(4)}  (visual ×${scale.toFixed(2)})`;
+}
+
+function drawTrapezoid(){ const b1 = Math.max(0.1, state.values.b1), b2 = Math.max(0.1, state.values.b2), altura = Math.max(0.1, state.values.altura); const scale = getScaleFor([b1,b2,altura]); const b1V = b1*scale, b2V = b2*scale, hV = altura*scale; const x=40,y=40; const topX = x + (b1V - b2V)/2;
+  const points = [ [x,y], [x+b1V,y], [topX+b2V,y+hV], [topX,y+hV] ]; const poly = create('polygon',{points:points.map(p=>p.join(',')).join(' '), fill:'rgba(43,75,255,0.06)', stroke:'rgba(124,77,255,0.9)','stroke-width':2}); svg.appendChild(poly);
+  makeHandle(x+b1V,y,(hx,hy)=>{ state.values.b1 = Math.round(((hx-x)/scale)*100)/100; renderParams(); draw(); });
+  makeHandle(topX+b2V,y+hV,(hx,hy)=>{ const newB2 = Math.round(((hx-topX)/scale)*100)/100; state.values.b2 = Math.max(0.1,newB2); renderParams(); draw(); });
+  makeHandle(x+20,y+hV,(hx,hy)=>{ state.values.altura = Math.round(((hy-y)/scale)*100)/100; renderParams(); draw(); });
+  const area = ((b1+b2)/2)*altura; areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = ((B + b)/2) × h = ((${b1} + ${b2})/2) × ${altura} = ${area.toFixed(4)}  (visual ×${scale.toFixed(2)})`;
+}
+
+function drawRhombus(){ const d1 = Math.max(0.1, state.values.d1), d2 = Math.max(0.1, state.values.d2); const scale = getScaleFor([d1,d2]); const d1V = d1*scale, d2V = d2*scale; const cx=250,cy=120; const points = [ [cx,cy-d2V/2],[cx+d1V/2,cy],[cx,cy+d2V/2],[cx-d1V/2,cy] ]; const poly = create('polygon',{points:points.map(p=>p.join(',')).join(' '), fill:'rgba(124,77,255,0.06)', stroke:'rgba(124,77,255,0.9)','stroke-width':2}); svg.appendChild(poly);
+  makeHandle(cx+d1V/2,cy,(hx,hy)=>{ state.values.d1 = Math.round(((hx-cx)*2/scale)*100)/100; renderParams(); draw(); });
+  makeHandle(cx,cy-d2V/2,(hx,hy)=>{ state.values.d2 = Math.round(((cy-hy)*2/scale)*100)/100; renderParams(); draw(); });
+  const area = (d1*d2)/2; areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = (D₁ × D₂)/2 = (${d1} × ${d2})/2 = ${area.toFixed(4)}  (visual ×${scale.toFixed(2)})`;
+}
+
+function drawTriangle(){ const b = Math.max(0.1, state.values.b), altura = Math.max(0.1, state.values.altura); const scale = getScaleFor([b,altura]); const bV = b*scale, hV = altura*scale; const x=60,y=60; const points = [ [x,y+hV],[x+bV/2,y],[x+bV,y+hV] ]; const poly = create('polygon',{points:points.map(p=>p.join(',')).join(' '), fill:'rgba(43,75,255,0.06)', stroke:'rgba(124,77,255,0.9)','stroke-width':2}); svg.appendChild(poly);
+  makeHandle(x+bV,y+hV,(hx,hy)=>{ state.values.b = Math.round(((hx-x)/scale)*100)/100; renderParams(); draw(); });
+  makeHandle(x+10,y,(hx,hy)=>{ state.values.altura = Math.round(((y+hV - hy)/scale)*100)/100; renderParams(); draw(); });
+  const area = (b*altura)/2; areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = (b × h)/2 = (${b} × ${altura})/2 = ${area.toFixed(4)}  (visual ×${scale.toFixed(2)})`;
+}
+
+function drawEquilateral(){ const lado = Math.max(0.1, state.values.lado); const scale = getScaleFor([lado]); const ladoV = lado*scale; const x=60,y=60; const h = Math.sqrt(3)/2 * ladoV; const points = [ [x,y+h],[x+ladoV/2,y],[x+ladoV,y+h] ]; const poly = create('polygon',{points:points.map(p=>p.join(',')).join(' '), fill:'rgba(124,77,255,0.06)', stroke:'rgba(43,75,255,0.9)','stroke-width':2}); svg.appendChild(poly);
+  makeHandle(x+ladoV,y+h,(hx,hy)=>{ state.values.lado = Math.round(((hx-x)/scale)*100)/100; renderParams(); draw(); });
+  const area = (Math.sqrt(3)/4) * lado*lado; areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = (√3/4) × a² = ${(Math.sqrt(3)/4).toFixed(4)} × ${lado}² = ${area.toFixed(4)}  (visual ×${scale.toFixed(2)})`;
+}
+
+function drawCircle(){ const r = Math.max(0.1, state.values.r); const scale = getScaleFor([2*r]); const rV = r*scale; const cx=250,cy=140; const c = create('circle',{cx:cx,cy:cy,r:rV,fill:'rgba(124,77,255,0.06)',stroke:'rgba(43,75,255,0.9)','stroke-width':2}); svg.appendChild(c);
+  makeHandle(cx+rV,cy,(hx,hy)=>{ state.values.r = Math.round(((hx-cx)/scale)*100)/100; renderParams(); draw(); });
+  const area = Math.PI*r*r; areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = π × r² = π × ${r}² = ${area.toFixed(4)}  (visual ×${scale.toFixed(2)})`;
+}
+
+function drawAnnulus(){ const R = Math.max(0.1, state.values.rOuter), r = Math.max(0.01, state.values.rInner); const scale = getScaleFor([2*R]); const RV = R*scale, rV = r*scale; const cx=250,cy=140; const outer = create('circle',{cx,cy,r:RV,fill:'rgba(43,75,255,0.04)',stroke:'rgba(43,75,255,0.9)','stroke-width':2}); const inner = create('circle',{cx,cy,r:rV,fill:'rgba(0,0,0,0.85)',stroke:'rgba(124,77,255,0.06)','stroke-width':2}); svg.appendChild(outer); svg.appendChild(inner);
+  makeHandle(cx+RV,cy,(hx,hy)=>{ state.values.rOuter = Math.round(((hx-cx)/scale)*100)/100; renderParams(); draw(); });
+  makeHandle(cx+rV,cy,(hx,hy)=>{ state.values.rInner = Math.round(((hx-cx)/scale)*100)/100; renderParams(); draw(); });
+  const area = Math.PI*(R*R - r*r); areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = π(R² - r²) = π(${R}² - ${r}²) = ${area.toFixed(4)}  (visual ×${scale.toFixed(2)})`;
+}
+
+function drawSector(){ const r = Math.max(0.1, state.values.r), angle = state.values.angle || 0; const scale = getScaleFor([r]); const rV = r*scale; const cx=250,cy=160; const theta = angle * Math.PI/180; const x1 = cx; const y1 = cy - rV; const x2 = cx + rV*Math.cos(-Math.PI/2 + theta); const y2 = cy + rV*Math.sin(-Math.PI/2 + theta);
+  const path = `M ${cx} ${cy} L ${x1} ${y1} A ${rV} ${rV} 0 ${angle>180?1:0} 1 ${x2} ${y2} Z`;
+  const p = create('path',{d:path,fill:'rgba(124,77,255,0.08)',stroke:'rgba(43,75,255,0.9)','stroke-width':2}); svg.appendChild(p);
+  makeHandle(x1,y1,(hx,hy)=>{ state.values.r = Math.round((Math.hypot(hx-cx,hy-cy)/scale)*100)/100; renderParams(); draw(); });
+  makeHandle(x2,y2,(hx,hy)=>{ const ang = Math.atan2(hy-cy,hx-cx) + Math.PI/2; let deg = ang*180/Math.PI; deg = ((deg%360)+360)%360; state.values.angle = Math.round(deg); renderParams(); draw(); });
+  const area = 0.5 * r * r * theta; areaEl.textContent = area.toFixed(4); formulaEl.textContent = `Área = (θ/2) × r² = (${theta.toFixed(4)}/2) × ${r}² = ${area.toFixed(4)} (θ em rad)  (visual ×${scale.toFixed(2)})`;
+}
+
+// inicialização
+initStateForShape(state.shape); renderParams(); draw();
+
+resetBtn.onclick = ()=>{ initStateForShape(state.shape); renderParams(); draw(); }
+
+downloadBtn.onclick = ()=>{ const serializer = new XMLSerializer(); const source = serializer.serializeToString(svg); const blob = new Blob([source],{type:'image/svg+xml'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = state.shape + '.svg'; a.click(); URL.revokeObjectURL(url); }
+
+</script>
+</body>
+</html>
